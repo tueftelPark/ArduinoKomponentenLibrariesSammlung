@@ -7,8 +7,8 @@ Libraries können auch im Bulk (alle zusammen) installiert werden, in dem man si
 
 Nicht vergessen die verwendeten Libraries richtig zu includen:
 
-#include "paj7620.h"
-#include "Grove_I2C_Motor_Driver.h"
-#include "Seeed_MPR121_driver.h" 
-#include <Adafruit_NeoPixel.h> 
-#include "Arduino_SensorKit.h"
+#include "paj7620.h"  
+#include "Grove_I2C_Motor_Driver.h"  
+#include "Seeed_MPR121_driver.h"  
+#include <Adafruit_NeoPixel.h>  
+#include "Arduino_SensorKit.h"  
