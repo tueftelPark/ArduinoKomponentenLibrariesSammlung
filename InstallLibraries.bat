@@ -12,21 +12,13 @@ set "TEMP_ZIP=%TEMP%\ArduinoLibsRepo.zip"
 set "TEMP_EXTRACT=%TEMP%\ArduinoLibsExtract"
 set "ARDUINO_LIB_PATH=%USERPROFILE%\Documents\Arduino\libraries"
 
-:: Zielordner leeren und neu erstellen (ohne Warnung)
-if exist "%ARDUINO_LIB_PATH%" (
-    echo [INFO] Leere den bestehenden Arduino Library Ordner...
-    rmdir /S /Q "%ARDUINO_LIB_PATH%"
-)
-echo [INFO] Erstelle den Arduino Library Ordner neu...
-mkdir "%ARDUINO_LIB_PATH%"
-
 :: Alten temporaeren Entpack-Ordner leeren, falls er noch existiert
 if exist "%TEMP_EXTRACT%" rmdir /S /Q "%TEMP_EXTRACT%"
 
 :: 1. Herunterladen
 echo.
 echo [1/4] Lade das Repository von GitHub herunter...
-curl -L -s -o "%TEMP_ZIP%" "%REPO_URL%"
+curl -fsSL -o "%TEMP_ZIP%" "%REPO_URL%"
 if %errorlevel% neq 0 (
     echo [FEHLER] Herunterladen fehlgeschlagen. Beende Skript.
     :: Schliesst das Skript bei einem Fehler automatisch
@@ -45,8 +37,12 @@ for /D %%I in ("%TEMP_EXTRACT%\*") do (
 )
 
 :: 4. Kopieren
+:: Der bestehende Library-Ordner wird erst hier geleert, wenn der neue Stand
+:: sicher entpackt bereitliegt - ohne Internet bleiben die alten Libraries stehen.
 if exist "%SOURCE_LIBS%" (
-    echo [4/4] Kopiere die Libraries...
+    echo [4/4] Ersetze die Libraries...
+    if exist "%ARDUINO_LIB_PATH%" rmdir /S /Q "%ARDUINO_LIB_PATH%"
+    mkdir "%ARDUINO_LIB_PATH%"
     xcopy "%SOURCE_LIBS%\*" "%ARDUINO_LIB_PATH%\" /E /H /C /I /Y >nul
     echo.
     echo [ERFOLG] Alle Libraries wurden installiert in:
@@ -54,6 +50,7 @@ if exist "%SOURCE_LIBS%" (
 ) else (
     echo.
     echo [FEHLER] Der Ordner 'Libraries' wurde nicht gefunden.
+    echo          Die bisherigen Libraries wurden nicht veraendert.
 )
 
 :: 5. Aufraeumen (Temporaere Dateien loeschen)
