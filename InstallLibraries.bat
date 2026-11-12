@@ -7,10 +7,12 @@ echo ========================================================
 echo.
 
 :: ---------------- Welche Libraries? ----------------
-:: Aus dem Arduino Library Manager - installiert wird immer die neueste Version.
-:: Bricht ein Update einmal Kurs-Sketches, laesst sich eine Version festhalten:
-:: "IRremote@4.7.1" statt "IRremote".
-set LIBS_MANAGER="Adafruit NeoPixel" "Arduino_Sensorkit" "DHT20" "Gesture PAJ7620" "Grove-3-Axis-Digital-Accelerometer-2g-to-16g-LIS3DHTR" "Grove I2C Motor Driver v1.3" "Grove Ultrasonic Ranger" "IRremote" "NewPing"
+:: Aus dem Arduino Library Manager - mit fester Version: alle Laptops haben denselben
+:: Stand, kein Update bricht unbemerkt Kurs-Sketches, und SETUP muss nicht jedes Mal
+:: nach neuen Versionen suchen.
+:: Update einer Library: Version hier erhoehen UND den Ordner in Libraries\ durch
+:: dieselbe Version ersetzen (z. B. in der Arduino IDE installieren und hineinkopieren).
+set LIBS_MANAGER="Adafruit NeoPixel@1.15.5" "Arduino_Sensorkit@1.4.0" "DHT20@0.3.3" "Gesture PAJ7620@1.0.0" "Grove-3-Axis-Digital-Accelerometer-2g-to-16g-LIS3DHTR@1.2.4" "Grove I2C Motor Driver v1.3@1.0.5" "Grove Ultrasonic Ranger@1.0.1" "IRremote@4.7.1" "NewPing@1.9.7"
 :: Nicht im Library Manager - direkt der neueste Stand von GitHub.
 :: Format: "Ordnername#Besitzer/Repo#Branch"
 set LIBS_GITHUB="Grove_Gesture-master#Seeed-Studio/Grove_Gesture#master" "Grove_touch_sensor_MPR121-master#Seeed-Studio/Seeed_MRP121#master" "Seeed_RGB_Led_Matrix#Seeed-Studio/Seeed_RGB_LED_Matrix#master"
@@ -31,15 +33,15 @@ set "STAND_DIR=%LOCALAPPDATA%\TueftelPark\LibrariesStand"
 set "KOPIE_LIBS=%STAND_DIR%\libraries"
 set "STAND_DATEI=%STAND_DIR%\stand.txt"
 set "WARNUNGEN=0"
-set "AUS_KOPIE="
 
 :: Alten temporaeren Entpack-Ordner leeren, falls er noch existiert
 if exist "%TEMP_EXTRACT%" rmdir /S /Q "%TEMP_EXTRACT%"
 
-:: 1. Stand pruefen: Hat sich die Sammlung oder eine GitHub-Library seit dem letzten
-:: Lauf geaendert? git ls-remote fragt nur den neuesten Commit ab (wenige Bytes).
-:: Unveraendert -> Libraries aus der lokalen Kopie einspielen, ohne Download.
-:: Der Ordner wird trotzdem frisch eingespielt, Aenderungen aus dem Kurs verschwinden.
+:: 1. Stand pruefen: Hat sich die Sammlung (inkl. dieses Skripts und der festen
+:: Versionen oben) oder eine GitHub-Library seit dem letzten Lauf geaendert?
+:: git ls-remote fragt nur den neuesten Commit ab (wenige Bytes).
+:: Unveraendert -> nur mit der lokalen Kopie abgleichen, ohne Download. Was im Kurs
+:: an den Libraries veraendert wurde, wird dabei trotzdem zurueckgesetzt.
 echo [1/6] Pruefe, ob sich an den Libraries etwas geaendert hat...
 call :stand_ermitteln
 set "STAND_ALT="
@@ -81,19 +83,25 @@ goto manager
 
 :aus_kopie
 echo        -^> Unveraendert seit dem letzten Mal - kein Download noetig.
-echo [2-4/6] Spiele die Libraries aus der lokalen Kopie ein...
-if exist "%ARDUINO_LIB_PATH%" rmdir /S /Q "%ARDUINO_LIB_PATH%"
-mkdir "%ARDUINO_LIB_PATH%"
-xcopy "%KOPIE_LIBS%\*" "%ARDUINO_LIB_PATH%\" /E /H /C /I /Y >nul
-echo        -^> Libraries eingespielt.
-set "AUS_KOPIE=1"
+echo [2-6/6] Gleiche die Libraries mit der lokalen Kopie ab...
+:: robocopy /MIR kopiert nur geaenderte Dateien und entfernt zusaetzliche. Wurde im
+:: Kurs nichts veraendert, ist das in Sekunden erledigt. Fehler erst ab Code 8.
+robocopy "%KOPIE_LIBS%" "%ARDUINO_LIB_PATH%" /MIR /NFL /NDL /NJH /NJS /NP >nul
+if errorlevel 8 (
+    echo        [WARNUNG] Abgleich fehlgeschlagen - beim naechsten Lauf wird neu heruntergeladen.
+    if exist "%STAND_DATEI%" del "%STAND_DATEI%"
+    set /a WARNUNGEN+=1
+) else (
+    echo        -^> Libraries sind auf dem festgelegten Stand.
+)
+goto zusammenfassung
 
 :manager
-:: 5. Library Manager: auf die neuesten Versionen aktualisieren. arduino-cli laedt
-:: nur, wenn es eine neuere Version gibt - aus der lokalen Kopie meist gar nichts.
+:: 5. Library Manager: die festgelegten Versionen installieren. Entspricht der
+:: Grundstock schon dieser Version, meldet arduino-cli nur "bereits installiert".
 :: arduino-cli liegt in der Arduino IDE 2 bei; der genaue Unterordner wechselt
 :: zwischen IDE-Versionen, darum wird gesucht statt ein Pfad fest eingetragen.
-echo [5/6] Aktualisiere Libraries aus dem Arduino Library Manager...
+echo [5/6] Installiere die festgelegten Versionen aus dem Arduino Library Manager...
 set "ARDUINO_CLI="
 if exist "%IDE_DIR%\resources" (
     for /R "%IDE_DIR%\resources" %%F in (arduino-cli.exe) do if exist "%%F" set "ARDUINO_CLI=%%F"
@@ -112,24 +120,20 @@ if errorlevel 1 (
 for %%L in (%LIBS_MANAGER%) do call :manager_lib %%L
 
 :github
-:: 6. Libraries, die es nur auf GitHub gibt. Aus der lokalen Kopie sind sie schon
-:: aktuell - ihr Stand gehoert zur Pruefung in Schritt 1.
-if defined AUS_KOPIE (
-    echo [6/6] Libraries von GitHub sind unveraendert - kein Download noetig.
-) else (
-    echo [6/6] Aktualisiere Libraries direkt von GitHub...
-    for %%G in (%LIBS_GITHUB%) do call :github_lib %%G
-)
+:: 6. Libraries, die es nur auf GitHub gibt (neuester Stand ihres Repos)
+echo [6/6] Aktualisiere Libraries direkt von GitHub...
+for %%G in (%LIBS_GITHUB%) do call :github_lib %%G
 
 :: Lokale Kopie fuer das naechste Mal aktualisieren - nur wenn alles geklappt hat,
 :: sonst wird beim naechsten Lauf wieder vollstaendig heruntergeladen.
 if !WARNUNGEN! equ 0 if defined STAND_NEU call :kopie_speichern
 
+:zusammenfassung
 echo.
 if !WARNUNGEN! equ 0 (
-    echo [ERFOLG] Alle Libraries sind auf dem neuesten Stand:
+    echo [ERFOLG] Alle Libraries sind auf dem festgelegten Stand:
 ) else (
-    echo [FERTIG] Libraries installiert, !WARNUNGEN! davon aus dem Grundstock statt neuester Version:
+    echo [FERTIG] Libraries installiert, mit !WARNUNGEN! Warnung^(en^) - siehe oben:
 )
 echo %ARDUINO_LIB_PATH%
 
@@ -184,9 +188,9 @@ if errorlevel 1 (
 > "%STAND_DATEI%" echo !STAND_NEU!
 exit /b
 
-:: Eine Library aus dem Library Manager in der neuesten Version installieren.
-:: Liegt sie schon als Grundstock vor, ersetzt arduino-cli sie (oder meldet
-:: "bereits installiert", wenn der Grundstock schon aktuell ist).
+:: Eine Library aus dem Library Manager in der festgelegten Version installieren.
+:: Liegt sie schon in dieser Version als Grundstock vor, meldet arduino-cli nur
+:: "bereits installiert"; sonst ersetzt es den Grundstock-Ordner.
 :manager_lib
 "%ARDUINO_CLI%" lib install %1 >nul 2>&1
 if errorlevel 1 (
